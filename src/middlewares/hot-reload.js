@@ -384,8 +384,6 @@ module.exports = function HotReloadMiddleware(broker) {
 					);
 				}
 
-				console.log(`broker.options.hotReload.modules`, broker.options.hotReload.modules)
-
 				if (broker.options.hotReload.extraFiles) {
 					/**
 					 * **Example:**
