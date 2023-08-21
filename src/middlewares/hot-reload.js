@@ -22,6 +22,7 @@ module.exports = function HotReloadMiddleware(broker) {
 	let prevProjectFiles = new Map();
 	let hotReloadModules = [];
 	let extraFiles = null;
+	const earlyProceedFiles = [];
 
 	function hotReloadService(service) {
 		const relPath = path.relative(process.cwd(), service.__filename);
@@ -50,12 +51,13 @@ module.exports = function HotReloadMiddleware(broker) {
 		cache.clear();
 		prevProjectFiles = projectFiles;
 		projectFiles = new Map();
+		earlyProceedFiles.length = 0;
 
 		// Read the main module
 		const mainModule = process.mainModule || require.main;
 
 		// Process the whole module tree
-		processModule(mainModule, null, 0, null);
+		processModule(mainModule, null, 0, null, earlyProceedFiles);
 
 		if (extraFiles != null) {
 			Object.entries(extraFiles).forEach(([fName, restartType]) => {
@@ -224,7 +226,7 @@ module.exports = function HotReloadMiddleware(broker) {
 	 * @param {*} service
 	 * @param {Number} level
 	 */
-	function processModule(mod, service = null, level = 0, parents = null) {
+	function processModule(mod, service = null, level = 0, parents = null, earlyProccedFiles) {
 		const fName = mod.filename;
 
 		// Skip node_modules files, if there is parent project file
@@ -277,7 +279,21 @@ module.exports = function HotReloadMiddleware(broker) {
 			} else if (parents) {
 				parents.push(fName);
 			}
-			mod.children.forEach(m => processModule(m, service, service ? level + 1 : 0, parents));
+
+			let m;
+			let earlyKey;
+
+			for(let i = 0; i < mod.children.length; i++) {
+				m = mod.children[i];
+
+				earlyKey = service ? `${service.fullName}:${m.filename}` : `_:${m.filename}`;
+
+				if (!earlyProccedFiles.includes(earlyKey)) {
+					earlyProccedFiles.push(earlyKey);
+
+					processModule(m, service, service ? level + 1 : 0, parents, earlyProccedFiles);
+				}
+			}
 		}
 	}
 
@@ -367,6 +383,9 @@ module.exports = function HotReloadMiddleware(broker) {
 						moduleName => `/node_modules/${moduleName}/`
 					);
 				}
+
+				console.log(`broker.options.hotReload.modules`, broker.options.hotReload.modules)
+
 				if (broker.options.hotReload.extraFiles) {
 					/**
 					 * **Example:**
